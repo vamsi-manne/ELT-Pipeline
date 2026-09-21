@@ -1,0 +1,112 @@
+source(output(
+		Customer_ID as string,
+		Name as string,
+		Email as string,
+		Phone as long,
+		City as string,
+		State as string,
+		Segment as string,
+		Modified_Date as string
+	),
+	allowSchemaDrift: false,
+	validateSchema: false,
+	ignoreNoFilesFound: false) ~> source1
+source(output(
+		tar_Customer_ID as string
+	),
+	allowSchemaDrift: true,
+	validateSchema: false,
+	format: 'query',
+	store: 'sqlserver',
+	query: 'select Customer_ID as tar_Customer_ID from Staging_Customer',
+	isolationLevel: 'READ_UNCOMMITTED') ~> source2
+source1 filter(!isNull(Customer_ID)) ~> filter1
+filter1 window(over(Customer_ID),
+	asc(Customer_ID, true),
+	duplicate = rowNumber()) ~> window1
+window1 filter(duplicate==1) ~> filter2
+filter2 derive(Name = iifNull(Name, 'UnKNown'),
+		Email = iifNull(Email, 'UnKnown'),
+		Phone = iifNull(Phone, 0),
+		City = iifNull(City, 'UnKnown'),
+		State = iifNull(State, 'UnKnown'),
+		Segment = iifNull(Segment, 'UnKnown'),
+		Modfied_Date = iifNull(Modified_Date, 'UnKnown')) ~> derivedColumn1
+derivedColumn1, source2 join(Customer_ID == tar_Customer_ID,
+	joinType:'left',
+	matchType:'exact',
+	ignoreSpaces: false,
+	broadcast: 'auto')~> join1
+join1 split(isNull(tar_Customer_ID),
+	Customer_ID == tar_Customer_ID,
+	disjoint: false) ~> split1@(Insert, Update)
+split1@Update alterRow(updateIf(1==1)) ~> alterRow1
+split1@Insert sink(allowSchemaDrift: true,
+	validateSchema: false,
+	input(
+		Customer_ID as string,
+		Name as string,
+		Email as string,
+		Phone as long,
+		City as string,
+		State as string,
+		Segment as string,
+		Modified_Date as timestamp
+	),
+	format: 'table',
+	store: 'sqlserver',
+	schemaName: 'dbo',
+	tableName: 'Staging_Customer',
+	insertable: true,
+	updateable: false,
+	deletable: false,
+	upsertable: false,
+	stagingSchemaName: '',
+	skipDuplicateMapInputs: true,
+	skipDuplicateMapOutputs: true,
+	errorHandlingOption: 'stopOnFirstError',
+	mapColumn(
+		Customer_ID,
+		Name,
+		Email,
+		Phone,
+		City,
+		State,
+		Segment,
+		Modified_Date = Modfied_Date
+	)) ~> sink1
+alterRow1 sink(allowSchemaDrift: true,
+	validateSchema: false,
+	input(
+		Customer_ID as string,
+		Name as string,
+		Email as string,
+		Phone as long,
+		City as string,
+		State as string,
+		Segment as string,
+		Modified_Date as timestamp
+	),
+	format: 'table',
+	store: 'sqlserver',
+	schemaName: 'dbo',
+	tableName: 'Staging_Customer',
+	insertable: false,
+	updateable: true,
+	deletable: false,
+	upsertable: false,
+	keys:['Customer_ID'],
+	stagingSchemaName: '',
+	skipDuplicateMapInputs: true,
+	skipDuplicateMapOutputs: true,
+	errorHandlingOption: 'stopOnFirstError',
+	mapColumn(
+		Customer_ID,
+		Name,
+		Email,
+		Phone,
+		City,
+		State,
+		Segment,
+		Modified_Date = Modfied_Date
+	)) ~> sink2

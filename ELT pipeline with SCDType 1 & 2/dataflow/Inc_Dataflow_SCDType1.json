@@ -1,0 +1,300 @@
+{
+    "name": "Inc_Dataflow_SCDType1",
+    "properties": {
+        "type": "MappingDataFlow",
+        "typeProperties": {
+            "sources": [
+                {
+                    "linkedService": {
+                        "referenceName": "AzureSqlDatabase1",
+                        "type": "LinkedServiceReference"
+                    },
+                    "name": "StagingSource"
+                },
+                {
+                    "linkedService": {
+                        "referenceName": "AzureSqlDatabase1",
+                        "type": "LinkedServiceReference"
+                    },
+                    "name": "targetSCDType2"
+                }
+            ],
+            "sinks": [
+                {
+                    "linkedService": {
+                        "referenceName": "AzureSqlDatabase1",
+                        "type": "LinkedServiceReference"
+                    },
+                    "name": "sink"
+                },
+                {
+                    "linkedService": {
+                        "referenceName": "AzureSqlDatabase1",
+                        "type": "LinkedServiceReference"
+                    },
+                    "name": "sinkUpdateSCDType2"
+                },
+                {
+                    "linkedService": {
+                        "referenceName": "AzureSqlDatabase1",
+                        "type": "LinkedServiceReference"
+                    },
+                    "name": "sinkUpdatedSCDTYpe1"
+                }
+            ],
+            "transformations": [
+                {
+                    "name": "select2"
+                },
+                {
+                    "name": "derivedColumn4"
+                },
+                {
+                    "name": "join2"
+                },
+                {
+                    "name": "split2"
+                },
+                {
+                    "name": "derivedColumn5"
+                },
+                {
+                    "name": "union1"
+                },
+                {
+                    "name": "derivedColumn6"
+                },
+                {
+                    "name": "alterRow2"
+                },
+                {
+                    "name": "select3"
+                },
+                {
+                    "name": "RemoveColumns"
+                },
+                {
+                    "name": "AlterRow1"
+                },
+                {
+                    "name": "derivedColumn7"
+                }
+            ],
+            "scriptLines": [
+                "source(output(",
+                "          Customer_ID as string,",
+                "          Name as string,",
+                "          Email as string,",
+                "          Phone as long,",
+                "          City as string,",
+                "          State as string,",
+                "          Segment as string,",
+                "          Modified_Date as timestamp",
+                "     ),",
+                "     allowSchemaDrift: true,",
+                "     validateSchema: false,",
+                "     format: 'table',",
+                "     store: 'sqlserver',",
+                "     schemaName: 'dbo',",
+                "     tableName: 'Staging_Customer',",
+                "     isolationLevel: 'READ_UNCOMMITTED') ~> StagingSource",
+                "source(output(",
+                "          Customer_ID as string,",
+                "          Name as string,",
+                "          Email as string,",
+                "          Phone as long,",
+                "          City as string,",
+                "          State as string,",
+                "          Segment as string,",
+                "          HashCol as long,",
+                "          createdBy as string,",
+                "          updatedBy as string,",
+                "          createdDate as timestamp,",
+                "          updatedDate as timestamp,",
+                "          isCurrent as integer",
+                "     ),",
+                "     allowSchemaDrift: true,",
+                "     validateSchema: false,",
+                "     format: 'query',",
+                "     store: 'sqlserver',",
+                "     query: 'select * from Dim_Customer where isCurrent=1',",
+                "     isolationLevel: 'READ_UNCOMMITTED') ~> targetSCDType2",
+                "StagingSource select(mapColumn(",
+                "          each(match(1==1),",
+                "               concat('src_',$$) = $$)",
+                "     ),",
+                "     skipDuplicateMapInputs: true,",
+                "     skipDuplicateMapOutputs: true) ~> select2",
+                "select2 derive(src_HashCol = crc32(src_Customer_ID,src_Name,src_Email,src_Phone,src_City,src_State,src_Segment)) ~> derivedColumn4",
+                "derivedColumn4, RemoveColumns join(src_Customer_ID == tar_Customer_ID,",
+                "     joinType:'left',",
+                "     matchType:'exact',",
+                "     ignoreSpaces: false,",
+                "     broadcast: 'auto')~> join2",
+                "join2 split(isNull(tar_Customer_ID),",
+                "     src_Customer_ID==tar_Customer_ID && src_HashCol!=tar_HashCol && (src_City!=tar_City || src_State!=tar_State || src_Segment!=tar_Segment),",
+                "     src_Customer_ID==tar_Customer_ID && src_HashCol!=tar_HashCol && (src_Name!=tar_Name || src_Email!=tar_Email || src_Phone!=tar_Phone),",
+                "     disjoint: false) ~> split2@(Insert, UpdateScdType2, UpdateScdType1)",
+                "split2@UpdateScdType2 derive(des_isCurrent = 0,",
+                "          des_updatedBy = 'Type 2 Updated DataFlow',",
+                "          des_UpdatedDate = currentTimestamp()) ~> derivedColumn5",
+                "split2@Insert, split2@UpdateScdType2 union(byName: true)~> union1",
+                "union1 derive(src_createdBy = 'DataFlow',",
+                "          src_updatedBy = 'DataFlow',",
+                "          src_createdDate = currentTimestamp(),",
+                "          src_updatedDate = currentTimestamp(),",
+                "          isCurrent = 1) ~> derivedColumn6",
+                "derivedColumn5 alterRow(updateIf(1==1)) ~> alterRow2",
+                "targetSCDType2 select(mapColumn(",
+                "          each(match(1==1),",
+                "               concat('tar_',$$) = $$)",
+                "     ),",
+                "     skipDuplicateMapInputs: true,",
+                "     skipDuplicateMapOutputs: true) ~> select3",
+                "select3 select(mapColumn(",
+                "          tar_Customer_ID,",
+                "          tar_Name,",
+                "          tar_Email,",
+                "          tar_Phone,",
+                "          tar_City,",
+                "          tar_State,",
+                "          tar_Segment,",
+                "          tar_HashCol",
+                "     ),",
+                "     skipDuplicateMapInputs: true,",
+                "     skipDuplicateMapOutputs: true) ~> RemoveColumns",
+                "derivedColumn7 alterRow(updateIf(1==1)) ~> AlterRow1",
+                "split2@UpdateScdType1 derive(SCDType1_UpdatedDate = currentTimestamp(),",
+                "          SCDType1_UpdatedBy = 'Type 1 Updated Dataflow',",
+                "          SCD2_isCurrent = 1) ~> derivedColumn7",
+                "derivedColumn6 sink(allowSchemaDrift: true,",
+                "     validateSchema: false,",
+                "     input(",
+                "          Customer_ID as string,",
+                "          Name as string,",
+                "          Email as string,",
+                "          Phone as long,",
+                "          City as string,",
+                "          State as string,",
+                "          Segment as string,",
+                "          HashCol as long,",
+                "          createdBy as string,",
+                "          updatedBy as string,",
+                "          createdDate as timestamp,",
+                "          updatedDate as timestamp,",
+                "          isCurrent as integer",
+                "     ),",
+                "     format: 'table',",
+                "     store: 'sqlserver',",
+                "     schemaName: 'dbo',",
+                "     tableName: 'Dim_Customer',",
+                "     insertable: true,",
+                "     updateable: false,",
+                "     deletable: false,",
+                "     upsertable: false,",
+                "     stagingSchemaName: '',",
+                "     skipDuplicateMapInputs: true,",
+                "     skipDuplicateMapOutputs: true,",
+                "     errorHandlingOption: 'stopOnFirstError',",
+                "     mapColumn(",
+                "          Customer_ID = src_Customer_ID,",
+                "          Name = src_Name,",
+                "          Email = src_Email,",
+                "          Phone = src_Phone,",
+                "          City = src_City,",
+                "          State = src_State,",
+                "          Segment = src_Segment,",
+                "          HashCol = src_HashCol,",
+                "          createdBy = src_createdBy,",
+                "          updatedBy = src_updatedBy,",
+                "          createdDate = src_createdDate,",
+                "          updatedDate = src_updatedDate,",
+                "          isCurrent",
+                "     )) ~> sink",
+                "alterRow2 sink(allowSchemaDrift: true,",
+                "     validateSchema: false,",
+                "     input(",
+                "          Customer_ID as string,",
+                "          Name as string,",
+                "          Email as string,",
+                "          Phone as long,",
+                "          City as string,",
+                "          State as string,",
+                "          Segment as string,",
+                "          HashCol as long,",
+                "          createdBy as string,",
+                "          updatedBy as string,",
+                "          createdDate as timestamp,",
+                "          updatedDate as timestamp,",
+                "          isCurrent as integer",
+                "     ),",
+                "     format: 'table',",
+                "     store: 'sqlserver',",
+                "     schemaName: 'dbo',",
+                "     tableName: 'Dim_Customer',",
+                "     insertable: false,",
+                "     updateable: true,",
+                "     deletable: false,",
+                "     upsertable: false,",
+                "     keys:['Customer_ID','HashCol','City','State','Segment'],",
+                "     stagingSchemaName: '',",
+                "     skipDuplicateMapInputs: true,",
+                "     skipDuplicateMapOutputs: true,",
+                "     errorHandlingOption: 'stopOnFirstError',",
+                "     mapColumn(",
+                "          Customer_ID = tar_Customer_ID,",
+                "          City = tar_City,",
+                "          State = tar_State,",
+                "          Segment = tar_Segment,",
+                "          HashCol = tar_HashCol,",
+                "          updatedBy = des_updatedBy,",
+                "          updatedDate = des_updatedBy,",
+                "          isCurrent = des_isCurrent",
+                "     )) ~> sinkUpdateSCDType2",
+                "AlterRow1 sink(allowSchemaDrift: true,",
+                "     validateSchema: false,",
+                "     input(",
+                "          Customer_ID as string,",
+                "          Name as string,",
+                "          Email as string,",
+                "          Phone as long,",
+                "          City as string,",
+                "          State as string,",
+                "          Segment as string,",
+                "          HashCol as long,",
+                "          createdBy as string,",
+                "          updatedBy as string,",
+                "          createdDate as timestamp,",
+                "          updatedDate as timestamp,",
+                "          isCurrent as integer",
+                "     ),",
+                "     format: 'table',",
+                "     store: 'sqlserver',",
+                "     schemaName: 'dbo',",
+                "     tableName: 'Dim_Customer',",
+                "     insertable: false,",
+                "     updateable: true,",
+                "     deletable: false,",
+                "     upsertable: false,",
+                "     keys:['Customer_ID'],",
+                "     stagingSchemaName: '',",
+                "     skipDuplicateMapInputs: true,",
+                "     skipDuplicateMapOutputs: true,",
+                "     errorHandlingOption: 'stopOnFirstError',",
+                "     mapColumn(",
+                "          Customer_ID = tar_Customer_ID,",
+                "          Name = src_Name,",
+                "          Email = src_Email,",
+                "          Phone = src_Phone,",
+                "          City = src_City,",
+                "          State = src_State,",
+                "          Segment = src_Segment,",
+                "          HashCol = src_HashCol,",
+                "          updatedBy = SCDType1_UpdatedBy,",
+                "          updatedDate = SCDType1_UpdatedDate,",
+                "          isCurrent = SCD2_isCurrent",
+                "     )) ~> sinkUpdatedSCDTYpe1"
+            ]
+        }
+    }
+}
